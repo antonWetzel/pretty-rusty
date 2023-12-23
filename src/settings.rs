@@ -1,15 +1,13 @@
-use std::{
-    collections::{HashMap, HashSet},
-    path::PathBuf,
-};
+use std::path::PathBuf;
 
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 
 use crate::FormatError;
 
 trait Overwrite {
-    type Partial;
-    fn overwrite(&mut self, other: Self::Partial);
+	type Partial;
+
+	fn overwrite(&mut self, other: Self::Partial);
 }
 
 macro_rules! identity_overwrite {
@@ -26,35 +24,36 @@ macro_rules! identity_overwrite {
 }
 
 macro_rules! create_normal_and_partial {
-    ($(struct $name:ident | $partial_name:ident {$(pub $member:ident: $member_type:ty,)*})*) => {
-        $(
-            #[derive(Serialize, Debug)]
-            #[serde(rename_all = "kebab-case")]
-            pub struct $name {
+    () => {};
+    (struct $name:ident | $partial_name:ident {$(pub $member:ident: $member_type:ty,)*} $($tail:tt)* ) => {
+        #[derive(Serialize, Debug)]
+        #[serde(rename_all = "kebab-case")]
+        pub struct $name {
+            $(
+                pub $member: $member_type,
+            )*
+        }
+
+        #[derive(Deserialize, Debug)]
+        #[serde(rename_all = "kebab-case")]
+        struct $partial_name {
+            $(
+                pub $member: Option<<$member_type as Overwrite>::Partial>,
+            )*
+        }
+
+        impl Overwrite for $name {
+            type Partial = $partial_name;
+            fn overwrite(&mut self, other: $partial_name) {
                 $(
-                    pub $member: $member_type,
+                    if let Some(value) = other.$member {
+                        self.$member.overwrite(value);
+                    }
                 )*
             }
+        }
 
-            #[derive(Deserialize, Debug)]
-            #[serde(rename_all = "kebab-case")]
-            struct $partial_name {
-                $(
-                    pub $member: Option<<$member_type as Overwrite>::Partial>,
-                )*
-            }
-
-            impl Overwrite for $name {
-                type Partial = $partial_name;
-                fn overwrite(&mut self, other: $partial_name) {
-                    $(
-                        if let Some(value) = other.$member {
-                            self.$member.overwrite(value);
-                        }
-                    )*
-                }
-            }
-        )*
+        create_normal_and_partial!($($tail)*);
     };
 }
 
@@ -80,80 +79,60 @@ macro_rules! create_normal_and_partial {
 //     EndOfCell,
 // }
 
-// #[derive(Deserialize, Serialize, Debug)]
-// #[serde(rename_all = "kebab-case")]
-// pub enum ColumnArgument {
-//     Default,
-//     Custom(String),
-// }
-
 // identity_overwrite!(usize, bool, UseLongBlock, LongBlockStyle, AlignComma);
 identity_overwrite!(usize, bool);
 
-impl<K: std::hash::Hash + std::cmp::Eq, T> Overwrite for HashMap<K, T> {
-    type Partial = Self;
-
-    fn overwrite(&mut self, other: Self::Partial) {
-        *self = other;
-    }
-}
-
-impl<K: std::hash::Hash + std::cmp::Eq> Overwrite for HashSet<K> {
-    type Partial = Self;
-
-    fn overwrite(&mut self, other: Self::Partial) {
-        *self = other;
-    }
-}
-
 create_normal_and_partial!(
-    // struct BlockSettings | PartialBlockSettings {
-    //     pub long_block_style: LongBlockStyle,
-    // }
-
-    // struct HeadingSettings | PartialHeadingSettings {
-    //     pub blank_lines_before: usize,
-    //     pub blank_lines_after: usize,
-    // }
-
-    // struct ColumnsSettings | PartialColumnsSettings {
-    //     pub comma: AlignComma,
-    // }
-
-    // struct PaddingSettings | PartialPaddingSettings {
-    //     pub space_before: bool,
-    //     pub space_after: bool,
-    // }
-
-    // struct PreserveNewLine | PartialPreserveNewLine {
-    //     pub content: bool,
-    //     pub math: bool,
-    // }
+    struct ListPaddingSettings | PartialPaddingSettings {
+        pub before: bool,
+        pub start: bool,
+        pub end: bool,
+        pub after: bool,
+    }
 
     struct Settings | PartialSettings {
         pub indentation: usize,
-        // pub seperate_label: bool,
-        // pub final_newline: bool,
-        // pub preserve_newline: PreserveNewLine,
-        // pub block: BlockSettings,
-        // pub term: PaddingSettings,
-        // pub named_argument: PaddingSettings,
-        // pub dictionary_entry: PaddingSettings,
-        // pub import_statement: PaddingSettings,
-        // pub comma: PaddingSettings,
-        // pub columns: ColumnsSettings,
-        // pub heading: HeadingSettings,
+        pub final_newline: bool,
 
-        // pub columns_methods: HashMap<String, String>,
+        pub use_list: ListPaddingSettings,
+        pub parameters: ListPaddingSettings,
+        pub arguments: ListPaddingSettings,
     }
 );
 
 impl Settings {
-    pub fn overwrite(&mut self, path: &PathBuf) -> Result<(), FormatError> {
-        let data =
-            std::fs::read_to_string(path).map_err(FormatError::FailedToReadConfigurationFile)?;
-        let partial = toml::from_str(&data)?;
-        <Self as Overwrite>::overwrite(self, partial);
-        Ok(())
-    }
+	pub fn overwrite(&mut self, path: &PathBuf) -> Result<(), FormatError> {
+		let data =
+		std::fs::read_to_string(path).map_err(FormatError::FailedToReadConfigurationFile)?;
+		let partial = toml::from_str(&data)?;
+		<Self as Overwrite>::overwrite(self, partial);
+		Ok(())
+	}
+}
+
+impl Default for Settings {
+	fn default() -> Self {
+		Self {
+			indentation: 0,
+			final_newline: true,
+			use_list: ListPaddingSettings {
+				before: false,
+				start: true,
+				end: true,
+				after: false,
+			},
+			arguments: ListPaddingSettings {
+				before: false,
+				start: false,
+				end: false,
+				after: false,
+			},
+			parameters: ListPaddingSettings {
+				before: false,
+				start: false,
+				end: false,
+				after: false,
+			},
+		}
+	}
 }

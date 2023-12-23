@@ -1,0 +1,13 @@
+{
+	"[rust]": {
+		"editor.defaultFormatter": "jkillian.custom-local-formatters",
+	},
+	"customLocalFormatters.formatters": [
+		{
+			"command": "cargo run -- --use-std-in --use-std-out --file-location=${file}",
+			"languages": [
+				"rust",
+			],
+		}
+	],
+}
