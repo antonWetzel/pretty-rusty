@@ -4,42 +4,40 @@ use ra_ap_syntax::SyntaxKind;
 use crate::{
 	output::{ Output, OutputTarget, Priority, Whitespace },
 	settings::Settings,
-	state::{ State, Scope },
+	state::State,
 	Node,
 	NodeExtension,
 };
 
-pub fn format(node: Node, mut state: State, settings: &Settings, output: &mut Output<impl OutputTarget>) {
-	use Whitespace as W;
-	use Priority as P;
-	use SyntaxKind as K;
+use Whitespace as W;
+use Priority as P;
+use SyntaxKind as K;
 
+pub fn format(node: Node, state: &mut State, settings: &Settings, output: &mut Output<impl OutputTarget>) {
 	let (before, after, priority) = match node.kind() {
 		K::WHITESPACE => return format_whitespace(node, state, settings, output),
 		K::ERROR => return skip_formatting(node, state, settings, output),
 
 		// lists
-		K::USE_TREE_LIST => return format_list(node, state, settings, output, settings.pad_use_list),
-		K::ARG_LIST => return format_list(node, state, settings, output, settings.pad_arguments),
-		K::PARAM_LIST => return format_list(node, state, settings, output, settings.pad_parameters),
-		K::GENERIC_PARAM_LIST => return format_list(node, state, settings, output, settings.pad_parameters),
-
-		// todo: own setting
-		K::TUPLE_FIELD_LIST => return format_list(node, state, settings, output, settings.pad_parameters),
-		K::VARIANT_LIST => return format_list(node, state, settings, output, settings.pad_parameters),
-		K::RECORD_FIELD_LIST => return format_list(node, state, settings, output, settings.pad_parameters),
-		K::TUPLE_EXPR => return format_list(node, state, settings, output, settings.pad_parameters),
-		K::TUPLE_PAT => return format_list(node, state, settings, output, settings.pad_parameters),
-		K::RECORD_EXPR_FIELD_LIST => return format_list(node, state, settings, output, settings.pad_parameters),
-		K::ARRAY_EXPR => return format_list(node, state, settings, output, settings.pad_parameters),
+		K::USE_TREE_LIST => return format_list(node, state, settings, output, settings.pad_curly_braces),
+		K::ARG_LIST => return format_list(node, state, settings, output, settings.pad_parenthesis),
+		K::PARAM_LIST => return format_list(node, state, settings, output, settings.pad_parenthesis),
+		K::GENERIC_PARAM_LIST => return format_list(node, state, settings, output, settings.pad_angled_brackets),
+		K::TUPLE_FIELD_LIST => return format_list(node, state, settings, output, settings.pad_parenthesis),
+		K::VARIANT_LIST => return format_list(node, state, settings, output, settings.pad_curly_braces),
+		K::RECORD_FIELD_LIST => return format_list(node, state, settings, output, settings.pad_curly_braces),
+		K::TUPLE_EXPR => return format_list(node, state, settings, output, settings.pad_parenthesis),
+		K::TUPLE_PAT => return format_list(node, state, settings, output, settings.pad_parenthesis),
+		K::RECORD_EXPR_FIELD_LIST => return format_list(node, state, settings, output, settings.pad_curly_braces),
+		K::ARRAY_EXPR => return format_list(node, state, settings, output, settings.pad_square_brackets),
 
 		// top level items
 		K::MATCH_ARM_LIST => return format_match_arms(node, state, settings, output),
-		K::FN => (Some(W::LineBreaks(2)), Some(W::LineBreaks(2)), Priority::High),
-		K::ENUM => (Some(W::LineBreaks(2)), Some(W::LineBreaks(2)), Priority::High),
-		K::STRUCT => (Some(W::LineBreaks(2)), Some(W::LineBreaks(2)), Priority::High),
-		K::TYPE_ALIAS => (Some(W::LineBreaks(2)), Some(W::LineBreaks(2)), Priority::High),
-		K::IMPL => (Some(W::LineBreaks(2)), Some(W::LineBreaks(2)), Priority::High),
+		K::FN => (Some(W::LineBreaks(2)), Some(W::LineBreaks(2)), Priority::Normal),
+		K::ENUM => (Some(W::LineBreaks(2)), Some(W::LineBreaks(2)), Priority::Normal),
+		K::STRUCT => (Some(W::LineBreaks(2)), Some(W::LineBreaks(2)), Priority::Normal),
+		K::TYPE_ALIAS => (Some(W::LineBreaks(2)), Some(W::LineBreaks(2)), Priority::Normal),
+		K::IMPL => (Some(W::LineBreaks(2)), Some(W::LineBreaks(2)), Priority::Normal),
 
 		// scopes
 		K::STMT_LIST => return format_code_scope(node, state, settings, output),
@@ -66,43 +64,13 @@ pub fn format(node: Node, mut state: State, settings: &Settings, output: &mut Ou
 		K::COLON => (Some(W::None), Some(W::Space), P::Normal),
 		K::AMP => (None, Some(W::None), P::Normal),
 		K::COLON2 => (Some(W::None), Some(W::None), P::Normal),
+
+		// chain tokens
 		K::DOT => return format_dot(node, state, settings, output),
-
-		// open list
-		K::L_PAREN | K::L_BRACK | K::L_CURLY | K::L_ANGLE => match state.scope {
-			Scope::CompactList => (None, Some(W::None), P::High),
-			Scope::PaddedList => (None, Some(W::Space), P::High),
-			Scope::MultilinList => (None, Some(W::LineBreak), P::High),
-			_ => return format_default(node, state, settings, output),
-		},
-
-		// seperators
-		K::COMMA | K::SEMICOLON => match state.scope {
-			Scope::MultilinList => (Some(W::None), Some(W::LineBreak), P::Normal),
-			Scope::CompactList => (Some(W::None), Some(W::Space), P::High),
-			Scope::PaddedList => (Some(W::None), Some(W::Space), P::High),
-			_ => (Some(W::None), None, P::High),
-		},
-
-		// close list
-		K::R_PAREN | K::R_BRACK | K::R_CURLY | K::R_ANGLE => match state.scope {
-			Scope::CompactList => (Some(W::None), None, P::High),
-			Scope::PaddedList => (Some(W::Space), None, P::High),
-			Scope::MultilinList => {
-				state.dedent();
-				(Some(W::LineBreak), None, Priority::High)
-			}
-			_ => return format_default(node, state, settings, output),
-		},
 
 		// end of file
 		K::EOF if settings.final_newline => (None, Some(W::LineBreak), P::Guaranteed),
 		K::EOF => (None, Some(W::None), P::Guaranteed),
-
-		// other
-		K::ARRAY_TYPE => return format_scoped(node, state, settings, output, Scope::CompactList),
-		K::MACRO_ARM if state.scope == Scope::MultilinList => (None, Some(W::LineBreak), P::High),
-		K::MACRO_ARM => (None, Some(W::Space), P::High),
 
 		// nothing special for rest
 		_ => return format_default(node, state, settings, output),
@@ -110,30 +78,14 @@ pub fn format(node: Node, mut state: State, settings: &Settings, output: &mut Ou
 	format_padded(node, state, settings, output, before, after, priority);
 }
 
-pub fn format_default(node: Node, mut state: State, settings: &Settings, output: &mut Output<impl OutputTarget>) {
-	output.raw(node.text(), state, settings);
-	state.scope = Scope::Default;
-	for child in node.children() {
-		format(child, state, settings, output);
-	}
-}
-
-fn format_scoped(
-	node: Node,
-	mut state: State,
-	settings: &Settings,
-	output: &mut Output<impl OutputTarget>,
-
-	scope: Scope,
-) {
-	state.scope = scope;
+pub fn format_default(node: Node, state: &mut State, settings: &Settings, output: &mut Output<impl OutputTarget>) {
 	output.raw(node.text(), state, settings);
 	for child in node.children() {
 		format(child, state, settings, output);
 	}
 }
 
-fn format_whitespace(node: Node, _state: State, _settings: &Settings, output: &mut Output<impl OutputTarget>) {
+fn format_whitespace(node: Node, _state: &mut State, _settings: &Settings, output: &mut Output<impl OutputTarget>) {
 	match node.text().chars().filter(|&c| c == '\n').count() {
 		0 => output.set_whitespace(Whitespace::Space, Priority::Low),
 		1 => output.set_whitespace(Whitespace::LineBreak, Priority::Low),
@@ -141,61 +93,99 @@ fn format_whitespace(node: Node, _state: State, _settings: &Settings, output: &m
 	}
 }
 
-fn format_dot(node: Node, mut state: State, settings: &Settings, output: &mut Output<impl OutputTarget>) {
+fn format_list(
+	node: Node,
+	state: &mut State,
+	settings: &Settings,
+	output: &mut Output<impl OutputTarget>,
+	pad: bool,
+) {
+	let trailing = node
+	.children()
+	.fold(false, |trailing, child| match (trailing, child.kind()) {
+		(_, K::COMMA | K::SEMICOLON) => true,
+		(old, K::WHITESPACE) => old,
+		(old, K::R_PAREN | K::R_BRACK | K::R_CURLY | K::R_ANGLE) => old,
+		(_, _) => false,
+	});
+
+	format_items(node, state, settings, output, trailing, pad);
+}
+
+fn format_dot(node: Node, state: &mut State, settings: &Settings, output: &mut Output<impl OutputTarget>) {
 	match output.get_whitespace().0 {
-		Whitespace::LineBreak | Whitespace::LineBreaks(_) => state.indent(),
+		Whitespace::LineBreak | Whitespace::LineBreaks(_) => {
+			state.indent();
+		}
 		_ => output.set_whitespace(Whitespace::None, Priority::High),
 	}
 	format_default(node, state, settings, output);
 	output.set_whitespace(Whitespace::None, Priority::High);
 }
 
-fn format_list(
+fn format_items(
 	node: Node,
-	mut state: State,
+	state: &mut State,
 	settings: &Settings,
 	output: &mut Output<impl OutputTarget>,
+
+	mutlti_line: bool,
 	pad: bool,
 ) {
-	let trailing = node
-		.children()
-		.fold(false, |trailing, child| match (trailing, child.kind()) {
-		(_, SyntaxKind::COMMA) => true,
-		(old, SyntaxKind::WHITESPACE) => old,
-		(old, SyntaxKind::R_PAREN | SyntaxKind::R_BRACK | SyntaxKind::R_CURLY | SyntaxKind::R_ANGLE) => old,
-		(_, _) => false,
-	});
-	if trailing {
-		state.indent()
+	let indentation = state.indentation;
+	for child in node.children() {
+		match child.kind() {
+			K::L_PAREN | K::L_BRACK | K::L_CURLY | K::L_ANGLE => {
+				format(child, state, settings, output);
+				if mutlti_line {
+					state.indent();
+					output.set_whitespace(Whitespace::LineBreak, Priority::High);
+				} else if pad {
+					output.set_whitespace(Whitespace::Space, Priority::High);
+				} else {
+					output.set_whitespace(Whitespace::None, Priority::High);
+				}
+			}
+			K::COMMA | K::SEMICOLON => {
+				format(child, state, settings, output);
+				if mutlti_line {
+					output.set_whitespace(Whitespace::LineBreak, Priority::Normal);
+				} else {
+					output.set_whitespace(Whitespace::Space, Priority::High);
+				}
+			}
+			K::R_PAREN | K::R_BRACK | K::R_CURLY | K::R_ANGLE => {
+				if mutlti_line {
+					state.dedent();
+					output.set_whitespace(Whitespace::LineBreak, Priority::High);
+				} else if pad {
+					output.set_whitespace(Whitespace::Space, Priority::High);
+				} else {
+					output.set_whitespace(Whitespace::None, Priority::High);
+				}
+				format(child, state, settings, output);
+			},
+			_ => format(child, state, settings, output),
+		}
 	}
-	format_scoped(node, state, settings, output, match (trailing, pad) {
-		(true, _) => Scope::MultilinList,
-		(_, true) => Scope::PaddedList,
-		(_, false) => Scope::CompactList,
-	});
+	state.indentation = indentation;
 }
 
-fn format_code_scope(node: Node, mut state: State, settings: &Settings, output: &mut Output<impl OutputTarget>) {
+fn format_code_scope(node: Node, state: &mut State, settings: &Settings, output: &mut Output<impl OutputTarget>) {
 	let empty = node.children().all(|node| {
 		matches!(node.kind(), SyntaxKind::L_CURLY | SyntaxKind::R_CURLY | SyntaxKind::WHITESPACE)
 	});
-	if empty.not() {
-		state.indent();
-	}
-	format_scoped(node, state, settings, output, match empty {
-		true => Scope::PaddedList,
-		false => Scope::MultilinList,
-	});
+	format_items(node, state, settings, output, empty.not(), true);
 }
 
-fn format_match_arms(node: Node, mut state: State, settings: &Settings, output: &mut Output<impl OutputTarget>) {
+fn format_match_arms(node: Node, state: &mut State, settings: &Settings, output: &mut Output<impl OutputTarget>) {
 	let trailing = if let Some(last_arm) = node
-		.children()
-		.filter(|node| node.kind() == SyntaxKind::MATCH_ARM)
-		.last() {
+	.children()
+	.filter(|node| node.kind() == SyntaxKind::MATCH_ARM)
+	.last() {
 		last_arm
-			.children()
-			.fold(false, |trailing, child| match (
+		.children()
+		.fold(false, |trailing, child| match (
 			trailing,
 			child.kind(),
 		) {
@@ -206,18 +196,12 @@ fn format_match_arms(node: Node, mut state: State, settings: &Settings, output: 
 	} else {
 		false
 	};
-	if trailing {
-		state.indent();
-	}
-	format_scoped(node, state, settings, output, match trailing {
-		true => Scope::MultilinList,
-		false => Scope::PaddedList,
-	});
+	format_items(node, state, settings, output, trailing, true);
 }
 
 fn format_padded(
 	node: Node,
-	state: State,
+	state: &mut State,
 	settings: &Settings,
 	output: &mut Output<impl OutputTarget>,
 
@@ -234,7 +218,7 @@ fn format_padded(
 	}
 }
 
-fn skip_formatting(node: Node, state: State, settings: &Settings, output: &mut Output<impl OutputTarget>) {
+fn skip_formatting(node: Node, state: &mut State, settings: &Settings, output: &mut Output<impl OutputTarget>) {
 	output.raw(node.text(), state, settings);
 	for child in node.children() {
 		skip_formatting(child, state, settings, output);

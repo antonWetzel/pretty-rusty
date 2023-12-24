@@ -1,30 +1,22 @@
-#[derive(Clone, Copy, Debug)]
+#[derive( Debug)]
 pub struct State {
-    pub indentation: usize,
-    pub scope: Scope,
+	pub indentation: usize,
+    pub chain: usize,
 }
 
 impl State {
-    pub fn new() -> Self {
-        Self {
-            indentation: 0,
-            scope: Scope::Default,
-        }
-    }
+	pub fn new() -> Self {
+		Self {
+			indentation: 0,
+            chain: 0,
+		}
+	}
 
-    pub fn indent(&mut self) {
-        self.indentation += 1;
-    }
+	pub fn indent(&mut self) {
+		self.indentation += 1;
+	}
 
-    pub fn dedent(&mut self) {
-        self.indentation -= 1
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Scope {
-    Default,
-    CompactList,
-    PaddedList,
-    MultilinList,
+	pub fn dedent(&mut self) {
+		self.indentation -= 1
+	}
 }

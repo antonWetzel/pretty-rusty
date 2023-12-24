@@ -10,4 +10,7 @@
 			],
 		}
 	],
+	"files.exclude": {
+		"target": true,
+	}
 }

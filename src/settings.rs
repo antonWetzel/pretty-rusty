@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 
 use crate::FormatError;
 
 trait Overwrite {
-    type Partial;
+	type Partial;
 
-    fn overwrite(&mut self, other: Self::Partial);
+	fn overwrite(&mut self, other: Self::Partial);
 }
 
 macro_rules! identity_overwrite {
@@ -89,30 +89,31 @@ create_normal_and_partial!(
         pub indentation: usize,
         pub final_newline: bool,
 
-        pub pad_use_list: bool,
-        pub pad_parameters: bool,
-        pub pad_arguments: bool,
+        pub pad_parenthesis : bool,
+        pub pad_curly_braces: bool,
+        pub pad_square_brackets: bool,
+        pub pad_angled_brackets: bool,
     }
 );
 
 impl Settings {
-    pub fn overwrite(&mut self, path: &PathBuf) -> Result<(), FormatError> {
-        let data =
-            std::fs::read_to_string(path).map_err(FormatError::FailedToReadConfigurationFile)?;
-        let partial = toml::from_str(&data)?;
-        <Self as Overwrite>::overwrite(self, partial);
-        Ok(())
-    }
+	pub fn overwrite(&mut self, path: &PathBuf) -> Result<(), FormatError> {
+		let data = std::fs::read_to_string(path).map_err(FormatError::FailedToReadConfigurationFile)?;
+		let partial = toml::from_str(&data)?;
+		<Self as Overwrite>::overwrite(self, partial);
+		Ok(())
+	}
 }
 
 impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            indentation: 0,
-            final_newline: true,
-            pad_use_list: true,
-            pad_arguments: false,
-            pad_parameters: false,
-        }
-    }
+	fn default() -> Self {
+		Self {
+			indentation: 0,
+			final_newline: true,
+			pad_parenthesis: false,
+			pad_curly_braces: true,
+			pad_square_brackets: false,
+            pad_angled_brackets: false,
+		}
+	}
 }
