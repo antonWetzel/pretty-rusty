@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 
 use crate::FormatError;
 
 trait Overwrite {
-	type Partial;
+    type Partial;
 
-	fn overwrite(&mut self, other: Self::Partial);
+    fn overwrite(&mut self, other: Self::Partial);
 }
 
 macro_rules! identity_overwrite {
@@ -83,56 +83,36 @@ macro_rules! create_normal_and_partial {
 identity_overwrite!(usize, bool);
 
 create_normal_and_partial!(
-    struct ListPaddingSettings | PartialPaddingSettings {
-        pub before: bool,
-        pub start: bool,
-        pub end: bool,
-        pub after: bool,
-    }
+
 
     struct Settings | PartialSettings {
         pub indentation: usize,
         pub final_newline: bool,
 
-        pub use_list: ListPaddingSettings,
-        pub parameters: ListPaddingSettings,
-        pub arguments: ListPaddingSettings,
+        pub pad_use_list: bool,
+        pub pad_parameters: bool,
+        pub pad_arguments: bool,
     }
 );
 
 impl Settings {
-	pub fn overwrite(&mut self, path: &PathBuf) -> Result<(), FormatError> {
-		let data =
-		std::fs::read_to_string(path).map_err(FormatError::FailedToReadConfigurationFile)?;
-		let partial = toml::from_str(&data)?;
-		<Self as Overwrite>::overwrite(self, partial);
-		Ok(())
-	}
+    pub fn overwrite(&mut self, path: &PathBuf) -> Result<(), FormatError> {
+        let data =
+            std::fs::read_to_string(path).map_err(FormatError::FailedToReadConfigurationFile)?;
+        let partial = toml::from_str(&data)?;
+        <Self as Overwrite>::overwrite(self, partial);
+        Ok(())
+    }
 }
 
 impl Default for Settings {
-	fn default() -> Self {
-		Self {
-			indentation: 0,
-			final_newline: true,
-			use_list: ListPaddingSettings {
-				before: false,
-				start: true,
-				end: true,
-				after: false,
-			},
-			arguments: ListPaddingSettings {
-				before: false,
-				start: false,
-				end: false,
-				after: false,
-			},
-			parameters: ListPaddingSettings {
-				before: false,
-				start: false,
-				end: false,
-				after: false,
-			},
-		}
-	}
+    fn default() -> Self {
+        Self {
+            indentation: 0,
+            final_newline: true,
+            pad_use_list: true,
+            pad_arguments: false,
+            pad_parameters: false,
+        }
+    }
 }
