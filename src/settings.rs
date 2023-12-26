@@ -1,14 +1,15 @@
 use std::path::PathBuf;
-
-use serde::{ Deserialize, Serialize };
-
+use serde::{Deserialize, Serialize};
 use crate::FormatError;
+
 
 trait Overwrite {
 	type Partial;
 
+
 	fn overwrite(&mut self, other: Self::Partial);
 }
+
 
 macro_rules! identity_overwrite {
     ($($t:ty),*$(,)?) => {
@@ -22,6 +23,7 @@ macro_rules! identity_overwrite {
         )*
     };
 }
+
 
 macro_rules! create_normal_and_partial {
     () => {};
@@ -57,6 +59,7 @@ macro_rules! create_normal_and_partial {
     };
 }
 
+
 // #[derive(Deserialize, Serialize, Debug)]
 // #[serde(rename_all = "kebab-case")]
 // pub enum UseLongBlock {
@@ -82,6 +85,7 @@ macro_rules! create_normal_and_partial {
 // identity_overwrite!(usize, bool, UseLongBlock, LongBlockStyle, AlignComma);
 identity_overwrite!(usize, bool);
 
+
 create_normal_and_partial!(
 
 
@@ -96,14 +100,17 @@ create_normal_and_partial!(
     }
 );
 
+
 impl Settings {
 	pub fn overwrite(&mut self, path: &PathBuf) -> Result<(), FormatError> {
 		let data = std::fs::read_to_string(path).map_err(FormatError::FailedToReadConfigurationFile)?;
 		let partial = toml::from_str(&data)?;
 		<Self as Overwrite>::overwrite(self, partial);
+
 		Ok(())
 	}
 }
+
 
 impl Default for Settings {
 	fn default() -> Self {
@@ -113,7 +120,7 @@ impl Default for Settings {
 			pad_parenthesis: false,
 			pad_curly_braces: true,
 			pad_square_brackets: false,
-            pad_angled_brackets: false,
+			pad_angled_brackets: false,
 		}
 	}
 }
