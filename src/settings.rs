@@ -1,6 +1,4 @@
-use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
-use crate::FormatError;
+use serde::{ Deserialize, Serialize };
 
 
 trait Overwrite {
@@ -102,11 +100,9 @@ create_normal_and_partial!(
 
 
 impl Settings {
-	pub fn overwrite(&mut self, path: &PathBuf) -> Result<(), FormatError> {
-		let data = std::fs::read_to_string(path).map_err(FormatError::FailedToReadConfigurationFile)?;
-		let partial = toml::from_str(&data)?;
+	pub fn overwrite(&mut self, data: &str) -> Result<(), toml::de::Error> {
+		let partial = toml::from_str(data)?;
 		<Self as Overwrite>::overwrite(self, partial);
-
 		Ok(())
 	}
 }

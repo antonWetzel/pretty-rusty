@@ -1,3 +1,4 @@
+use std::ops::Not;
 use crate::settings::Settings;
 
 
@@ -48,6 +49,20 @@ impl State {
 		}
 		self.chained = true;
 		self.indentation += 1;
+	}
+
+
+	pub fn in_chain(&self) -> bool {
+		self.chained
+	}
+
+
+	pub fn exit_chain(&mut self) {
+		if self.chained.not() {
+			return;
+		}
+		self.chained = false;
+		self.indentation -= 1;
 	}
 
 

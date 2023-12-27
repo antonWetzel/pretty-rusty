@@ -6,7 +6,7 @@ use super::settings::Settings;
 pub enum Whitespace {
 	None,
 	Space,
-	Spaces (usize),
+	// Spaces (usize),
 	LineBreak,
 	LineBreaks (usize),
 }
@@ -22,36 +22,35 @@ impl Default for Whitespace {
 impl Whitespace {
 	pub fn from_text(text: &str) -> Self {
 		let linebreaks = text.chars().filter(| &c | c == '\n').count();
-		match (linebreaks, text.len()) {
-			(_, 0) => Self::None,
-			(0, 1) => Self::Space,
-			(0, l) => Self::Spaces(l),
-			(1, _) => Self::LineBreak,
-			(l, _) => Self::LineBreaks(l),
+		match linebreaks {
+			0 if text.len() == 0 => Self::Space,
+			0 => Self::Space,
+			1 => Self::LineBreak,
+			l => Self::LineBreaks(l),
 		}
 	}
 }
 
 
-pub trait OutputTarget {
+pub trait Target {
 	fn emit(&mut self, data: &str, settings: &Settings);
 }
 
 
-impl <T: std::io::Write> OutputTarget for T {
+impl <T: std::io::Write> Target for T {
 	fn emit(&mut self, data: &str, _settings: &Settings) {
 		self.write_all(data.as_bytes()).unwrap();
 	}
 }
 
 
-pub struct Output <'a, Target: OutputTarget> {
-	target: &'a mut Target,
+pub struct Output <'a, T: Target> {
+	target: &'a mut T,
 }
 
 
-impl <'a, Target: OutputTarget> Output<'a, Target> {
-	pub fn new(target: &'a mut Target) -> Self {
+impl <'a, T: Target> Output<'a, T> {
+	pub fn new(target: &'a mut T) -> Self {
 		Self {
 			target,
 		}
@@ -73,9 +72,9 @@ impl <'a, Target: OutputTarget> Output<'a, Target> {
 		match whitespace {
 			Whitespace::None => { }
 			Whitespace::Space => self.target.emit(" ", &state.settings()),
-			Whitespace::Spaces(amount) => {
-				self.target.emit(&format!("{0: <1$}", "", amount), &state.settings());
-			}
+			// Whitespace::Spaces(amount) => {
+			// 	self.target.emit(&format!("{0: <1$}", "", amount), &state.settings());
+			// }
 			Whitespace::LineBreak => {
 				self.target.emit("\n", &state.settings());
 				self.emit_indentation(state, &state.settings())
@@ -93,6 +92,15 @@ impl <'a, Target: OutputTarget> Output<'a, Target> {
 			return;
 		}
 		self.target.emit(text, &state.settings());
+	}
+
+
+	pub fn finish(mut self, state: &State) {
+		if state.settings().final_newline {
+			self.whitespace(Whitespace::LineBreak, state);
+		} else {
+			self.whitespace(Whitespace::None, state);
+		}
 	}
 }
 
