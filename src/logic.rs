@@ -146,124 +146,126 @@ fn whitespace(
 	parent: SyntaxKind,
 	state: &mut State,
 ) -> Whitespace {
+	let ws = match (left, middle, right) {
+		// list open
+		(K::L_PAREN | K::L_BRACK | K::L_CURLY | K::L_ANGLE | K::PIPE, _, _) if scope == Scope::MultilineList => {
+			state.indent();
+			W::LineBreak
+		}
+		(K::L_PAREN | K::L_BRACK | K::L_CURLY | K::L_ANGLE | K::PIPE, _, _) if scope == Scope::PaddedList => {
+			state.enter_scope();
+			W::Space
+		}
+		(K::L_PAREN | K::L_BRACK | K::L_CURLY | K::L_ANGLE | K::PIPE, _, _) if scope == Scope::CompactList => {
+			state.enter_scope();
+			W::None
+		}
+
+		// list close
+		(_, _, K::R_PAREN | K::R_BRACK | K::R_CURLY | K::R_ANGLE | K::PIPE) if scope == Scope::MultilineList => {
+			state.dedent();
+			W::LineBreak
+		}
+		(_, _, K::R_PAREN | K::R_BRACK | K::R_CURLY | K::R_ANGLE | K::PIPE) if scope == Scope::PaddedList => W::Space,
+		(_, _, K::R_PAREN | K::R_BRACK | K::R_CURLY | K::R_ANGLE | K::PIPE) if scope == Scope::CompactList => W::None,
+
+		// list seperator
+		(_, _, K::COMMA) => W::None,
+		(K::COMMA, W::LineBreaks(_), _) if scope == Scope::MultilineList => W::LineBreaks(2),
+		(K::COMMA, _, _) if scope == Scope::MultilineList => W::LineBreak,
+		(K::COMMA, _, _) => W::Space,
+
+		//top items
+		(K::USE | K::CONST | K::TYPE_ALIAS, W::LineBreaks(_), K::USE | K::CONST | K::TYPE_ALIAS) if left == right => W::LineBreaks(2),
+		(K::USE | K::CONST | K::TYPE_ALIAS, _, K::USE | K::CONST | K::TYPE_ALIAS) if left == right => W::LineBreak,
+
+		(K::MODULE, _, K::MODULE) => W::LineBreak,
+		(_, _, K::USE | K::MODULE | K::FN | K::STRUCT | K::IMPL | K::ENUM | K::UNION | K::MACRO_RULES | K::MACRO_CALL | K::TYPE_ALIAS | K::TRAIT)
+			=> W::LineBreaks(3),
+		(K::USE | K::MODULE | K::FN | K::STRUCT | K::IMPL | K::ENUM | K::UNION | K::MACRO_RULES | K::MACRO_CALL | K::TYPE_ALIAS | K::TRAIT, _, _)
+			=> W::LineBreaks(3),
+
+		(_, _, K::CONST) if top_level(parent) => W::LineBreaks(3),
+		(K::CONST, _, _) if top_level(parent) => W::LineBreaks(3),
+
+		// statements
+		(K::EXPR_STMT | K::LET_STMT, W::LineBreaks(_), _) if scope == Scope::MultilineList => W::LineBreaks(2),
+		(K::EXPR_STMT | K::LET_STMT, _, _) if scope == Scope::MultilineList => W::LineBreak,
+
+		// chains
+		(_, W::LineBreak | W::LineBreaks(_), K::EQ | K::DOT | K::PIPE | K::PIPE2 | K::AMP2 | K::FAT_ARROW | K::PLUS | K::MINUS | K::STAR | K::SLASH | K::PERCENT | K::AMP | K::CARET | K::SHL | K::SHR | K::FOR_KW) => {
+			state.start_chain();
+			W::LineBreak
+		}
+
+		(_, _, K::ASSOC_ITEM_LIST) if state.in_chain() => {
+			state.exit_chain();
+			W::LineBreak
+		}
+
+		// tokens
+		(_, _, K::COLON2 | K::DOT2 | K::DOT2EQ) => W::None,
+		(K::COLON2 | K::DOT2 | K::DOT2EQ, _, _) => W::None,
+
+		(_, _, K::COLON) => W::None,
+		(K::COLON, _, _) => W::Space,
+
+		(_, _, K::SEMICOLON | K::QUESTION) => W::None,
+
+		(K::POUND, _, _) => W::None,
+		(K::BANG, _, _) if matches!(parent, K::ATTR | K::MACRO_CALL) => W::None,
+		(_, _, K::BANG) => W::None,
+		(K::AMP, _, _) if matches!(parent, K::SELF_PARAM | K::REF_TYPE | K::REF_EXPR | K::REF_PAT) => W::None,
+
+		(_, _, K::DOT) => W::None,
+		(K::DOT, _, _) => W::None,
+
+		(_, _, K::EQ) => W::Space,
+		(K::EQ, _, _) => W::Space,
+
+		(_, _, K::L_PAREN) => W::None,
+
+		// other
+		(K::ATTR, _, _) if matches!(parent, K::FN | K::STRUCT | K::ENUM | K::UNION | K::VARIANT | K::RECORD_FIELD | K::MACRO_RULES)
+			=> W::LineBreak,
+		(_, _, K::META) => W::None,
+		(K::META, _, _) => W::None,
+		(K::PATH, _, _) if matches!(parent, K::META | K::TUPLE_STRUCT_PAT) => W::None,
+
+		(K::MATCH_ARM, W::LineBreaks(_), _) if scope == Scope::MultilineList => W::LineBreaks(2),
+		(K::MATCH_ARM, _, _) if scope == Scope::MultilineList => W::LineBreak,
+
+		(_, _, K::PARAM_LIST | K::TUPLE_FIELD_LIST | K::GENERIC_PARAM_LIST | K::GENERIC_ARG_LIST) if parent != K::CLOSURE_EXPR => W::None,
+		(K::STAR, _, K::CONST_KW) => W::None,
+		(K::STAR | K::PLUS | K::MINUS | K::BANG, _, _) if matches!(parent, K::PREFIX_EXPR | K::PTR_TYPE) => W::None,
+		(_, _, K::L_BRACK) if parent == K::INDEX_EXPR => W::None,
+
+		(_, _, K::ARG_LIST) => W::None,
+
+		(_, _, K::WHERE_CLAUSE) => W::LineBreak,
+		(K::WHERE_CLAUSE, _, _) => W::LineBreak,
+		(_, _, K::WHERE_PRED) => {
+			state.start_chain();
+			W::LineBreak
+		}
+
+		(_, _, K::LET_ELSE | K::BLOCK_EXPR) if state.in_chain() => {
+			state.exit_chain();
+			W::LineBreak
+		}
+
+		(_, W::LineBreaks(_), _) if parent == K::STMT_LIST => W::LineBreaks(2),
+		(_, _, _) if parent == K::STMT_LIST => W::LineBreak,
+		(_, _, _) => W::Space,
+	};
+
 	match (left, middle, right) {
-	// comments
-	(_, W::LineBreaks(_), K::COMMENT) => W::LineBreaks(2),
-	(_, ws, K::COMMENT) => ws,
-	(K::COMMENT, W::LineBreaks(_), _) => W::LineBreaks(2),
-	(K::COMMENT, ws, _) => ws,
-
-	// list open
-	(K::L_PAREN | K::L_BRACK | K::L_CURLY | K::L_ANGLE | K::PIPE, _, _) if scope == Scope::MultilineList => {
-		state.indent();
-		W::LineBreak
+		(_, W::LineBreaks(_), K::COMMENT) => W::LineBreaks(2),
+		(_, _, K::COMMENT) => middle,
+		(K::COMMENT, W::LineBreaks(_), _) => W::LineBreaks(2),
+		(K::COMMENT, W::LineBreak, _) => W::LineBreak,
+		(_, _, _) => ws
 	}
-	(K::L_PAREN | K::L_BRACK | K::L_CURLY | K::L_ANGLE | K::PIPE, _, _) if scope == Scope::PaddedList => {
-		state.enter_scope();
-		W::Space
-	}
-	(K::L_PAREN | K::L_BRACK | K::L_CURLY | K::L_ANGLE | K::PIPE, _, _) if scope == Scope::CompactList => {
-		state.enter_scope();
-		W::None
-	}
-
-	// list close
-	(_, _, K::R_PAREN | K::R_BRACK | K::R_CURLY | K::R_ANGLE | K::PIPE) if scope == Scope::MultilineList => {
-		state.dedent();
-		W::LineBreak
-	}
-	(_, _, K::R_PAREN | K::R_BRACK | K::R_CURLY | K::R_ANGLE | K::PIPE) if scope == Scope::PaddedList => W::Space,
-	(_, _, K::R_PAREN | K::R_BRACK | K::R_CURLY | K::R_ANGLE | K::PIPE) if scope == Scope::CompactList => W::None,
-
-	// list seperator
-	(_, _, K::COMMA) => W::None,
-	(K::COMMA, W::LineBreaks(_), _) if scope == Scope::MultilineList => W::LineBreaks(2),
-	(K::COMMA, _, _) if scope == Scope::MultilineList => W::LineBreak,
-	(K::COMMA, _, _) => W::Space,
-
-	//top items
-	(K::USE | K::CONST | K::TYPE_ALIAS, W::LineBreaks(_), K::USE | K::CONST | K::TYPE_ALIAS) if left == right => W::LineBreaks(2),
-	(K::USE | K::CONST | K::TYPE_ALIAS, _, K::USE | K::CONST | K::TYPE_ALIAS) if left == right => W::LineBreak,
-
-	(K::MODULE, _, K::MODULE) => W::LineBreak,
-	(_, _, K::USE | K::MODULE | K::FN | K::STRUCT | K::IMPL | K::ENUM | K::UNION | K::MACRO_RULES | K::MACRO_CALL | K::TYPE_ALIAS | K::TRAIT)
-		=> W::LineBreaks(3),
-	(K::USE | K::MODULE | K::FN | K::STRUCT | K::IMPL | K::ENUM | K::UNION | K::MACRO_RULES | K::MACRO_CALL | K::TYPE_ALIAS | K::TRAIT, _, _)
-		=> W::LineBreaks(3),
-
-	(_, _, K::CONST) if top_level(parent) => W::LineBreaks(3),
-	(K::CONST, _, _) if top_level(parent) => W::LineBreaks(3),
-
-	// statements
-	(K::EXPR_STMT | K::LET_STMT, W::LineBreaks(_), _) if scope == Scope::MultilineList => W::LineBreaks(2),
-	(K::EXPR_STMT | K::LET_STMT, _, _) if scope == Scope::MultilineList => W::LineBreak,
-
-	// chains
-	(_, W::LineBreak | W::LineBreaks(_), K::EQ | K::DOT | K::PIPE | K::PIPE2 | K::AMP2 | K::FAT_ARROW | K::PLUS | K::MINUS | K::STAR | K::SLASH | K::PERCENT | K::AMP | K::CARET | K::SHL | K::SHR | K::FOR_KW) => {
-		state.start_chain();
-		W::LineBreak
-	}
-
-	(_, _, K::ASSOC_ITEM_LIST) if state.in_chain() => {
-		state.exit_chain();
-		W::LineBreak
-	}
-
-	// tokens
-	(_, _, K::COLON2 | K::DOT2) => W::None,
-	(K::COLON2 | K::DOT2, _, _) => W::None,
-
-	(_, _, K::COLON) => W::None,
-	(K::COLON, _, _) => W::Space,
-
-	(_, _, K::SEMICOLON | K::QUESTION) => W::None,
-
-	(K::POUND, _, _) => W::None,
-	(K::BANG, _, _) if matches!(parent, K::ATTR | K::MACRO_CALL) => W::None,
-	(_, _, K::BANG) => W::None,
-	(K::AMP, _, _) if matches!(parent, K::SELF_PARAM | K::REF_TYPE | K::REF_EXPR | K::REF_PAT) => W::None,
-
-	(_, _, K::DOT) => W::None,
-	(K::DOT, _, _) => W::None,
-
-	(_, _, K::EQ) => W::Space,
-	(K::EQ, _, _) => W::Space,
-
-	(_, _, K::L_PAREN) => W::None,
-
-	// other
-	(K::ATTR, _, _) if matches!(parent, K::FN | K::STRUCT | K::ENUM | K::UNION | K::VARIANT | K::RECORD_FIELD | K::MACRO_RULES)
-		=> W::LineBreak,
-	(_, _, K::META) => W::None,
-	(K::META, _, _) => W::None,
-	(K::PATH, _, _) if matches!(parent, K::META | K::TUPLE_STRUCT_PAT) => W::None,
-
-	(K::MATCH_ARM, W::LineBreaks(_), _) if scope == Scope::MultilineList => W::LineBreaks(2),
-	(K::MATCH_ARM, _, _) if scope == Scope::MultilineList => W::LineBreak,
-
-	(_, _, K::PARAM_LIST | K::TUPLE_FIELD_LIST | K::GENERIC_PARAM_LIST | K::GENERIC_ARG_LIST) if parent != K::CLOSURE_EXPR => W::None,
-	(K::STAR, _, K::CONST_KW) => W::None,
-	(K::STAR | K::PLUS | K::MINUS | K::BANG, _, _) if matches!(parent, K::PREFIX_EXPR | K::PTR_TYPE) => W::None,
-	(_, _, K::L_BRACK) if parent == K::INDEX_EXPR => W::None,
-
-	(_, _, K::ARG_LIST) => W::None,
-
-	(_, _, K::WHERE_CLAUSE) => W::LineBreak,
-	(K::WHERE_CLAUSE, _, _) => W::LineBreak,
-	(_, _, K::WHERE_PRED) => {
-		state.start_chain();
-		W::LineBreak
-	}
-
-	(_, _, K::LET_ELSE | K::BLOCK_EXPR) if state.in_chain() => {
-		state.exit_chain();
-		W::LineBreak
-	}
-
-	(_, W::LineBreaks(_), _) if parent == K::STMT_LIST => W::LineBreaks(2),
-	(_, _, _) if parent == K::STMT_LIST => W::LineBreak,
-	(_, _, _) => W::Space,
-}
 }
 
 
@@ -277,7 +279,7 @@ fn list(node: &SyntaxNode, pad: bool) -> Scope {
 		.children_with_tokens()
 		.fold(false, |trailing, child| match (trailing, child.kind()) {
 			(_, K::COMMA | K::SEMICOLON) => true,
-			(old, K::WHITESPACE) => old,
+			(old, K::WHITESPACE | K::COMMENT) => old,
 			(old, K::R_PAREN | K::R_BRACK | K::R_CURLY | K::R_ANGLE) => old,
 			(_, _) => false,
 		});
