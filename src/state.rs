@@ -6,7 +6,6 @@ use crate::settings::Settings;
 pub struct State {
 	settings: Settings,
 	indentation: usize,
-
 	chained: bool,
 }
 

@@ -176,24 +176,34 @@ fn whitespace(
 		(K::COMMA, _, _) => W::Space,
 
 		//top items
-		(K::USE | K::CONST | K::TYPE_ALIAS, W::LineBreaks(_), K::USE | K::CONST | K::TYPE_ALIAS) if left == right => W::LineBreaks(2),
+		(K::USE | K::CONST | K::TYPE_ALIAS, W::LineBreaks(_), K::USE | K::CONST | K::TYPE_ALIAS)
+			if left == right => W::LineBreaks(2),
 		(K::USE | K::CONST | K::TYPE_ALIAS, _, K::USE | K::CONST | K::TYPE_ALIAS) if left == right => W::LineBreak,
 
 		(K::MODULE, _, K::MODULE) => W::LineBreak,
-		(_, _, K::USE | K::MODULE | K::FN | K::STRUCT | K::IMPL | K::ENUM | K::UNION | K::MACRO_RULES | K::MACRO_CALL | K::TYPE_ALIAS | K::TRAIT)
-			=> W::LineBreaks(3),
-		(K::USE | K::MODULE | K::FN | K::STRUCT | K::IMPL | K::ENUM | K::UNION | K::MACRO_RULES | K::MACRO_CALL | K::TYPE_ALIAS | K::TRAIT, _, _)
-			=> W::LineBreaks(3),
+		(_, _, K::USE | K::MODULE | K::FN | K::STRUCT | K::IMPL | K::ENUM | K::UNION
+			| K::MACRO_RULES | K::MACRO_CALL | K::TYPE_ALIAS | K::TRAIT)
+			=> W::LineBreaks(state.settings().blank_lines_around_items + 1),
+		(K::USE | K::MODULE | K::FN | K::STRUCT | K::IMPL | K::ENUM | K::UNION
+			| K::MACRO_RULES | K::MACRO_CALL | K::TYPE_ALIAS | K::TRAIT, _, _)
+			=> W::LineBreaks(state.settings().blank_lines_around_items + 1),
 
-		(_, _, K::CONST) if top_level(parent) => W::LineBreaks(3),
-		(K::CONST, _, _) if top_level(parent) => W::LineBreaks(3),
+		(_, _, K::CONST) if top_level(parent) => W::LineBreaks(state.settings().blank_lines_around_items + 1),
+		(K::CONST, _, _) if top_level(parent) => W::LineBreaks(state.settings().blank_lines_around_items + 1),
 
 		// statements
 		(K::EXPR_STMT | K::LET_STMT, W::LineBreaks(_), _) if scope == Scope::MultilineList => W::LineBreaks(2),
 		(K::EXPR_STMT | K::LET_STMT, _, _) if scope == Scope::MultilineList => W::LineBreak,
 
 		// chains
-		(_, W::LineBreak | W::LineBreaks(_), K::EQ | K::DOT | K::PIPE | K::PIPE2 | K::AMP2 | K::FAT_ARROW | K::PLUS | K::MINUS | K::STAR | K::SLASH | K::PERCENT | K::AMP | K::CARET | K::SHL | K::SHR | K::FOR_KW) => {
+		(
+			_,
+			W::LineBreak | W::LineBreaks(_),
+			K::EQ | K::DOT | K::PIPE | K::PIPE2 | K::AMP2 | K::FAT_ARROW
+				| K::PLUS | K::MINUS | K::STAR | K::SLASH | K::PERCENT
+				| K::AMP | K::CARET | K::SHL | K::SHR
+				| K::FOR_KW | K::MATCH_GUARD,
+		) => {
 			state.start_chain();
 			W::LineBreak
 		}
@@ -226,7 +236,8 @@ fn whitespace(
 		(_, _, K::L_PAREN) => W::None,
 
 		// other
-		(K::ATTR, _, _) if matches!(parent, K::FN | K::STRUCT | K::ENUM | K::UNION | K::VARIANT | K::RECORD_FIELD | K::MACRO_RULES)
+		(K::ATTR, _, _)
+			if matches!(parent, K::FN | K::STRUCT | K::ENUM | K::UNION | K::VARIANT | K::RECORD_FIELD | K::MACRO_RULES)
 			=> W::LineBreak,
 		(_, _, K::META) => W::None,
 		(K::META, _, _) => W::None,
@@ -235,7 +246,8 @@ fn whitespace(
 		(K::MATCH_ARM, W::LineBreaks(_), _) if scope == Scope::MultilineList => W::LineBreaks(2),
 		(K::MATCH_ARM, _, _) if scope == Scope::MultilineList => W::LineBreak,
 
-		(_, _, K::PARAM_LIST | K::TUPLE_FIELD_LIST | K::GENERIC_PARAM_LIST | K::GENERIC_ARG_LIST) if parent != K::CLOSURE_EXPR => W::None,
+		(_, _, K::PARAM_LIST | K::TUPLE_FIELD_LIST | K::GENERIC_PARAM_LIST | K::GENERIC_ARG_LIST)
+			if parent != K::CLOSURE_EXPR => W::None,
 		(K::STAR, _, K::CONST_KW) => W::None,
 		(K::STAR | K::PLUS | K::MINUS | K::BANG, _, _) if matches!(parent, K::PREFIX_EXPR | K::PTR_TYPE) => W::None,
 		(_, _, K::L_BRACK) if parent == K::INDEX_EXPR => W::None,
@@ -294,7 +306,8 @@ fn list(node: &SyntaxNode, pad: bool) -> Scope {
 
 fn code(node: &SyntaxNode, mut max_length: usize) -> Scope {
 	let empty = node.children_with_tokens().all(|node| {
-		matches!(node.kind(), SyntaxKind::L_CURLY | SyntaxKind::R_CURLY | SyntaxKind::WHITESPACE) || node.text_range().len() < TextSize::try_from(std::mem::take(&mut max_length)).unwrap()
+		matches!(node.kind(), SyntaxKind::L_CURLY | SyntaxKind::R_CURLY | SyntaxKind::WHITESPACE)
+			|| node.text_range().len() < TextSize::try_from(std::mem::take(&mut max_length)).unwrap()
 	});
 
 	match empty {

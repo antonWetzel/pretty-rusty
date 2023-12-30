@@ -57,7 +57,6 @@ macro_rules! create_normal_and_partial {
     };
 }
 
-
 // #[derive(Deserialize, Serialize, Debug)]
 // #[serde(rename_all = "kebab-case")]
 // pub enum UseLongBlock {
@@ -91,6 +90,8 @@ create_normal_and_partial!(
         pub indentation: usize,
         pub final_newline: bool,
 
+        pub blank_lines_around_items: usize,
+
         pub pad_parenthesis : bool,
         pub pad_curly_braces: bool,
         pub pad_square_brackets: bool,
@@ -113,6 +114,8 @@ impl Default for Settings {
 		Self {
 			indentation: 0,
 			final_newline: true,
+			blank_lines_around_items: 2,
+
 			pad_parenthesis: false,
 			pad_curly_braces: true,
 			pad_square_brackets: false,
