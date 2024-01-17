@@ -6,14 +6,16 @@ Formatter for Rust
 
 - somewhat usable (based on my code and what I want)
 	- features are added if I need them
-	- defaults to single space between everything
+	- defaults to single space between everything text
 
 ## Features / Design
 
 - only modify whitespace
 - no maximal line width
 	- insert linebreaks based on source code
-- format lists based on trailing comma
+- format lists based on whitespace after open bracket
+	- single line if no linebreak
+	- multiline if linebreak
 
 ## Architecture
 

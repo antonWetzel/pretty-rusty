@@ -6,13 +6,11 @@ use crate::{
 
 use SyntaxKind as K;
 use Whitespace as W;
-use ra_ap_syntax::TextSize;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scope {
 	Default,
-
 	CompactList,
 	PaddedList,
 	MultilineList,
@@ -108,7 +106,10 @@ pub fn format_node(node: &SyntaxNode, parent: SyntaxKind, state: &mut State, out
 			| K::ARRAY_EXPR
 			| K::GENERIC_ARG_LIST
 			| K::PAREN_TYPE
-			| K::VISIBILITY => {
+			| K::VISIBILITY
+			| K::ITEM_LIST
+			| K::ASSOC_ITEM_LIST
+			| K::STMT_LIST => {
 			let pad = node.children_with_tokens().find_map(|node| match node.kind() {
 				SyntaxKind::L_PAREN => Some(state.settings().pad_parenthesis),
 				SyntaxKind::L_BRACK => Some(state.settings().pad_square_brackets),
@@ -122,9 +123,6 @@ pub fn format_node(node: &SyntaxNode, parent: SyntaxKind, state: &mut State, out
 		K::ATTR | K::PATH_SEGMENT | K::PAREN_EXPR | K::PAREN_PAT => Scope::CompactList,
 
 		K::MATCH_ARM_LIST | K::WHERE_CLAUSE => Scope::MultilineList,
-
-		K::ITEM_LIST | K::ASSOC_ITEM_LIST => code(node, 0),
-		K::STMT_LIST => code(node, 5),
 
 		_ => Scope::Default,
 	};
@@ -147,10 +145,18 @@ fn whitespace(
 	state: &mut State,
 ) -> Whitespace {
 	let ws = match (left, middle, right) {
+
 		// list open
 		(K::L_PAREN | K::L_BRACK | K::L_CURLY | K::L_ANGLE | K::PIPE, _, _) if scope == Scope::MultilineList => {
-			state.indent();
-			W::LineBreak
+			if matches!(right, K::R_PAREN | K::R_BRACK | K::R_CURLY | K::R_ANGLE | K::PIPE) {
+				match middle {
+					W::LineBreaks(_) => W::LineBreaks(2),
+					_ => W::LineBreak,
+				}
+			} else {
+				state.indent();
+				W::LineBreak
+			}
 		}
 		(K::L_PAREN | K::L_BRACK | K::L_CURLY | K::L_ANGLE | K::PIPE, _, _) if scope == Scope::PaddedList => {
 			state.enter_scope();
@@ -205,7 +211,10 @@ fn whitespace(
 				| K::FOR_KW | K::MATCH_GUARD,
 		) => {
 			state.start_chain();
-			W::LineBreak
+			match middle {
+				W::LineBreaks(_) => W::LineBreaks(2),
+				_ => W::LineBreak
+			}
 		}
 
 		(_, _, K::ASSOC_ITEM_LIST) if state.in_chain() => {
@@ -282,36 +291,20 @@ fn whitespace(
 
 
 fn list(node: &SyntaxNode, pad: bool) -> Scope {
-	if node.kind() == SyntaxKind::RECORD_EXPR_FIELD_LIST {
-		if node.children_with_tokens().any(|node| node.kind() == SyntaxKind::DOT2) {
-			return Scope::MultilineList;
-		}
-	}
-	let trailing = node
+	let multiline = node
 		.children_with_tokens()
-		.fold(false, |trailing, child| match (trailing, child.kind()) {
-			(_, K::COMMA | K::SEMICOLON) => true,
-			(old, K::WHITESPACE | K::COMMENT) => old,
-			(old, K::R_PAREN | K::R_BRACK | K::R_CURLY | K::R_ANGLE) => old,
-			(_, _) => false,
-		});
+		.find_map(|node| match node.kind() {
+			K::L_PAREN | K::L_BRACK | K::L_CURLY | K::L_ANGLE => None,
+			K::WHITESPACE => match node {
+				NodeOrToken::Token(token) => Some(token.text().contains('\n')),
+				NodeOrToken::Node(_) => unreachable!(),
+			},
+			_ => Some(false),
+		}).unwrap_or(false);
 
-	match (trailing, pad) {
+	match (multiline, pad) {
 		(true, _) => Scope::MultilineList,
 		(_, true) => Scope::PaddedList,
 		(_, false) => Scope::CompactList,
-	}
-}
-
-
-fn code(node: &SyntaxNode, mut max_length: usize) -> Scope {
-	let empty = node.children_with_tokens().all(|node| {
-		matches!(node.kind(), SyntaxKind::L_CURLY | SyntaxKind::R_CURLY | SyntaxKind::WHITESPACE)
-			|| node.text_range().len() < TextSize::try_from(std::mem::take(&mut max_length)).unwrap()
-	});
-
-	match empty {
-		true => Scope::PaddedList,
-		false => Scope::MultilineList,
 	}
 }
